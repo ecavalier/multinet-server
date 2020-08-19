@@ -2,11 +2,9 @@
 from __future__ import annotations  # noqa: T484
 
 from dataclasses import dataclass, asdict, field
-from arango.database import StandardDatabase
 from arango.exceptions import DatabaseCreateError
 
-from multinet.db import workspace_mapping, workspace_mapping_collection, db, system_db
-from multinet.types import WorkspaceDocument, Workspace as WorkspaceDict
+from multinet.db import workspace_mapping, workspace_mapping_collection, db
 from multinet.errors import (
     AlreadyExists,
     InternalServerError,
@@ -19,7 +17,7 @@ from multinet.user import User
 from multinet.graph import Graph
 from multinet.table import Table
 
-from typing import Optional, List, Dict, Generator, Callable, Any
+from typing import List, Dict, Generator, Any
 
 
 @dataclass
@@ -91,7 +89,14 @@ class Workspace:
         return (doc["name"] for doc in coll.all())
 
     @staticmethod
+    def list_public() -> Generator[str, None, None]:
+        """Return a list of all public workspace names."""
+        coll = workspace_mapping_collection()
+        return (doc["name"] for doc in coll.find({"permissions.public": True}))
+
+    @staticmethod
     def from_dict(d: Dict, readonly: bool = True) -> Workspace:
+        """Construct a workspace from a dict."""
         workspace = Workspace(name=d["name"], readonly=readonly)
 
         internal = d.get("internal")
@@ -115,6 +120,7 @@ class Workspace:
         coll.update(doc)
 
     def get_permissions(self) -> WorkspacePermissions:
+        """Fetch and return the permissions on this workspace."""
         doc = self.get_metadata()
 
         self.permissions = self.permissions or doc["permissions"]
@@ -123,17 +129,11 @@ class Workspace:
         return WorkspacePermissions(**doc["permissions"])
 
     def set_permissions(self, permissions: WorkspacePermissions):
-        # doc = workspace_mapping(self.name)
-        # if doc is None:
-        #     raise WorkspaceNotFound
-
-        # self.permissions = self.permissions or doc["permissions"]
-        # self.internal = self.internal or doc["internal"]
-
-        # return WorkspacePermissions(**doc["permissions"])
+        """Set the permissions on a workspace."""
         pass
 
     def asdict(self) -> Dict:
+        """Return this workspace as a dictionary."""
         filtered = {
             k: v for k, v in self.__dict__.items() if k not in Workspace.exclude_keys
         }
@@ -142,12 +142,15 @@ class Workspace:
         return filtered
 
     def rename(self):
+        """Rename this workspace."""
         pass
 
     def delete(self):
+        """Delete this workspace."""
         pass
 
     def get_metadata(self) -> Dict:
+        """Fetch and return the metadata for this workspace."""
         doc = workspace_mapping(self.name)
         if not doc:
             raise WorkspaceNotFound
@@ -155,16 +158,19 @@ class Workspace:
         return doc
 
     def graphs(self) -> List[Dict]:
+        """Return the graphs in this workspace."""
         return self.handle.graphs()
 
     def graph(self, name: str) -> Graph:
-        """Return Graph Class"""
+        """Return a specific graph."""
         if not self.handle.has_graph(name):
             raise GraphNotFound(self.name, name)
 
         return Graph(name, self.name, self.handle.graph(name), self.handle)
 
     def tables(self, table_type: str = "all") -> Generator[str, None, None]:
+        """Return all tables of the specified type."""
+
         def pass_all(x: Dict[str, Any]) -> bool:
             return True
 
@@ -193,5 +199,5 @@ class Workspace:
         return tables
 
     def table(self, name: str) -> Table:
-        """Return Table Class"""
+        """Return a specific table."""
         return Table(name, self.handle.collection(name))

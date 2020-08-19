@@ -11,7 +11,6 @@ from multinet.types import EdgeDirection, TableType
 from multinet.auth.util import (
     require_login,
     require_reader,
-    is_reader,
     require_writer,
     require_maintainer,
     require_owner,
@@ -49,11 +48,7 @@ def _permissions_id_to_user(permissons: WorkspacePermissions) -> Dict:
     This fuction will eventually be supplanted by a change in our permission model.
     """
 
-    # Cast to a regular dict, since it won't actually be
-    # a `WorkspacePermissions` after we perform replacement
-    # new_permissions = cast(Dict, deepcopy(permissons))
     new_permissions = asdict(permissons)
-
     for role, users in new_permissions.items():
         if role == "public":
             continue
@@ -97,15 +92,13 @@ def _permissions_user_to_id(expanded_user_permissions: Dict) -> WorkspacePermiss
 @bp.route("/workspaces", methods=["GET"])
 @swag_from("swagger/workspaces.yaml")
 def get_workspaces() -> Any:
-    """Retrieve list of workspaces."""
+    """Return the list of available workspaces, based on the logged in user."""
     user = current_user()
 
-    # Filter all workspaces based on whether it should be shown to the user who
-    # is logged in.
-    stream = util.stream(
-        w for w in Workspace.list_all() if is_reader(user, Workspace(w))
-    )
-    return stream
+    if user is not None:
+        return util.stream(user.available_workspaces())
+
+    return util.stream(Workspace.list_public())
 
 
 @bp.route("/workspaces/<workspace>/permissions", methods=["GET"])
@@ -142,7 +135,6 @@ def set_workspace_permissions(workspace: str) -> Any:
 def get_workspace_tables(workspace: str, type: TableType = "all") -> Any:  # noqa: A002
     """Retrieve the tables of a single workspace."""
     tables = Workspace(workspace).tables()
-
     return util.stream(tables)
 
 

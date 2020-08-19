@@ -8,9 +8,9 @@ from copy import copy
 from dacite import from_dict
 from flask import session as flask_session
 
-from multinet.db import user_collection
+from multinet.db import user_collection, system_db, _run_aql_query
 
-from typing import Optional, Dict
+from typing import Optional, Dict, Generator
 
 MULTINET_COOKIE = "multinet-token"
 
@@ -174,3 +174,23 @@ class User:
         full_dict["multinet"] = copy(self.multinet.__dict__)
 
         return full_dict
+
+    def available_workspaces(self) -> Generator[str, None, None]:
+        """Return all workspaces this user has access to."""
+
+        sysdb = system_db()
+        bind_vars = {"@workspaces": "workspace_mapping", "userid": self.sub}
+
+        query = """
+        FOR w in @@workspaces
+            FILTER (
+                w.permissions.public == true
+                || w.permissions.owner == @userid
+                || @userid IN w.permissions.maintainers
+                || @userid IN w.permissions.writers
+                || @userid IN w.permissions.readers
+            )
+            RETURN w
+        """
+
+        return (x["name"] for x in _run_aql_query(sysdb.aql, query, bind_vars))
