@@ -1,5 +1,4 @@
 """Handling of Google Authorization."""
-import dataclasses
 import requests
 import base64
 import json
@@ -15,19 +14,7 @@ from authlib.integrations.flask_client import OAuth
 from webargs.flaskparser import use_kwargs
 from webargs import fields
 
-from multinet.user import (
-    User
-    #     MULTINET_COOKIE,
-    #     load_user,
-    #     updated_user,
-    #     get_user_cookie,
-    #     set_user_cookie,
-    #     register_user,
-    #     filter_user_info,
-    ,
-)
-
-# from multinet.auth.types import GoogleUserInfo, User
+from multinet.user import User, MULTINET_COOKIE
 from multinet.auth.types import GoogleUserInfo
 
 from typing import Dict, Optional
@@ -138,21 +125,15 @@ def authorized(state: str, code: str) -> ResponseWrapper:
     token = google.authorize_access_token()
     rawinfo = parse_id_token(token["id_token"])
 
-    if not User.exists(rawinfo.sub):
+    existing_user = User.from_id(rawinfo.sub)
+    if not existing_user:
         user = User.register(**rawinfo.__dict__)
     else:
-        existing_user = User.from_id(rawinfo.sub)
-        new_user_data = {**existing_user.__dict__, **rawinfo.__dict__}
-        new_user = User(**new_user_data)
+        new_user_data = {**User.asdict(existing_user), **rawinfo.__dict__}
+        user = User.from_dict(new_user_data)
 
-        user = new_user.save()
-        # loaded_user = User(**rawinfo.__dict__)
-        loaded_user.arango = loaded_user.get_session()
-        # new_user = from_dict(User, {**dataclasses.asdict(loaded_user), **rawinfo})
-        user = updated_user(new_user)
-
-    user = set_user_cookie(user)
-    cookie = get_user_cookie(user)
+    cookie = user.get_session()
+    user.save()
 
     return_url = session.pop("return_url", default_return_url())
     resp = make_response(redirect(ensure_external_url(return_url)))

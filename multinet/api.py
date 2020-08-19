@@ -6,7 +6,7 @@ from flask import Blueprint, request
 from webargs import fields
 from webargs.flaskparser import use_kwargs
 
-from typing import Any, Optional, List, Dict, cast
+from typing import Any, Optional, List, Dict
 from multinet.types import EdgeDirection, TableType
 from multinet.auth.util import (
     require_login,
@@ -18,7 +18,6 @@ from multinet.auth.util import (
 )
 from multinet.validation import ValidationFailure, UndefinedKeys, UndefinedTable
 
-# from multinet.types import WorkspacePermissions
 
 from multinet import db, util
 from multinet.errors import (
@@ -63,13 +62,13 @@ def _permissions_id_to_user(permissons: WorkspacePermissions) -> Dict:
             # Since the role is "owner", `users` is a `str`
             user = User.from_id(users)
             if user is not None:
-                new_permissions["owner"] = asdict(user)
+                new_permissions["owner"] = user.asdict()
         else:
             new_users = []
             for sub in users:
                 user = User.from_id(sub)
                 if user is not None:
-                    new_users.append(asdict(user))
+                    new_users.append(user.asdict())
 
             new_permissions[role] = new_users
 
@@ -92,7 +91,6 @@ def _permissions_user_to_id(expanded_user_permissions: Dict) -> WorkspacePermiss
         else:
             permissions[role] = [user["sub"] for user in users]
 
-    # return cast(WorkspacePermissions, permissions)
     return WorkspacePermissions(**permissions)
 
 

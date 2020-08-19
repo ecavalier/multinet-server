@@ -1,50 +1,20 @@
 """Low-level database operations."""
 import os
-import copy
 from functools import lru_cache
 
 from arango import ArangoClient
-from arango.graph import Graph
 from arango.database import StandardDatabase
 from arango.collection import StandardCollection
 from arango.aql import AQL
 from arango.cursor import Cursor
 
-from arango.exceptions import (
-    DatabaseCreateError,
-    EdgeDefinitionCreateError,
-    AQLQueryValidateError,
-    AQLQueryExecuteError,
-)
+from arango.exceptions import AQLQueryValidateError, AQLQueryExecuteError
 from requests.exceptions import ConnectionError
 
-from typing import Any, List, Dict, Set, Generator, Optional, cast
+from typing import Any, List, Dict, Optional
 from typing_extensions import TypedDict
-from multinet.types import (
-    EdgeDirection,
-    TableType,
-    Workspace,
-    WorkspaceDocument,
-    WorkspacePermissions,
-)
 
-# from multinet.auth.types import User
-from multinet.errors import InternalServerError
-from multinet.validation.csv import validate_csv
-from multinet import util
-
-from multinet.errors import (
-    BadQueryArgument,
-    WorkspaceNotFound,
-    TableNotFound,
-    GraphNotFound,
-    NodeNotFound,
-    AlreadyExists,
-    GraphCreationError,
-    AQLExecutionError,
-    AQLValidationError,
-    DatabaseCorrupted,
-)
+from multinet.errors import AQLExecutionError, AQLValidationError
 
 
 # Type definitions.
@@ -133,12 +103,31 @@ def workspace_mapping(name: str) -> Optional[Dict]:
 
 def user_collection() -> StandardCollection:
     """Return the collection that contains user documents."""
-    sysdb = db("_system")
+    sysdb = db("_system", readonly=False)
 
     if not sysdb.has_collection("users"):
         sysdb.create_collection("users")
 
     return sysdb.collection("users")
+
+
+def search_user(query: str) -> Cursor:
+    """Search for users given a partial string."""
+
+    coll = user_collection()
+    aql = db("_system").aql
+
+    bind_vars = {"@users": coll.name, "query": query}
+    query = """
+        FOR doc in @@users
+          FILTER CONTAINS(LOWER(doc.name), LOWER(@query))
+            OR CONTAINS(LOWER(doc.email), LOWER(@query))
+
+          LIMIT 50
+          RETURN doc
+    """
+
+    return _run_aql_query(aql, query, bind_vars)
 
 
 # def create_workspace(name: str, user: User) -> str:
@@ -273,18 +262,18 @@ def user_collection() -> StandardCollection:
 #     return table
 
 
-# def _run_aql_query(
-#     aql: AQL, query: str, bind_vars: Optional[Dict[str, Any]] = None
-# ) -> Cursor:
-#     try:
-#         aql.validate(query)
-#         cursor = aql.execute(query, bind_vars=bind_vars)
-#     except AQLQueryValidateError as e:
-#         raise AQLValidationError(str(e))
-#     except AQLQueryExecuteError as e:
-#         raise AQLExecutionError(str(e))
+def _run_aql_query(
+    aql: AQL, query: str, bind_vars: Optional[Dict[str, Any]] = None
+) -> Cursor:
+    try:
+        aql.validate(query)
+        cursor = aql.execute(query, bind_vars=bind_vars)
+    except AQLQueryValidateError as e:
+        raise AQLValidationError(str(e))
+    except AQLQueryExecuteError as e:
+        raise AQLExecutionError(str(e))
 
-#     return cursor
+    return cursor
 
 
 # def aql_query(workspace: str, query: str) -> Cursor:
