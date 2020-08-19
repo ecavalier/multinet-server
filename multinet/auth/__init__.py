@@ -9,11 +9,12 @@ from webargs import fields
 from webargs.flaskparser import use_kwargs
 
 from multinet.user import (
+    # user_from_cookie,
+    # filtered_user,
+    # delete_user_cookie,
+    # search_user,
     MULTINET_COOKIE,
-    user_from_cookie,
-    filtered_user,
-    delete_user_cookie,
-    search_user,
+    User
 )
 
 from multinet.util import stream
@@ -33,12 +34,14 @@ def user_info() -> ResponseWrapper:
     if cookie is None:
         return logged_out
 
-    user = user_from_cookie(cookie)
+    # user = user_from_cookie(cookie)
+    user = User.from_session(cookie)
     if user is None:
         session.pop(MULTINET_COOKIE, None)
         return logged_out
 
-    return make_response(asdict(filtered_user(user)))
+    # return make_response(asdict(filtered_user(user)))
+    return make_response(user.asdict())
 
 
 @bp.route("/logout", methods=["GET"])

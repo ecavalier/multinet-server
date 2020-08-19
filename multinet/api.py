@@ -17,7 +17,8 @@ from multinet.auth.util import (
     require_owner,
 )
 from multinet.validation import ValidationFailure, UndefinedKeys, UndefinedTable
-from multinet.types import WorkspacePermissions
+
+# from multinet.types import WorkspacePermissions
 
 from multinet import db, util
 from multinet.errors import (
@@ -27,7 +28,10 @@ from multinet.errors import (
     AlreadyExists,
     RequiredParamsMissing,
 )
-from multinet.user import current_user, find_user_from_id
+
+# from multinet.user import current_user, find_user_from_id
+from multinet.user import current_user, User
+from multinet.workspace import Workspace, WorkspacePermissions
 
 bp = Blueprint("multinet", __name__)
 
@@ -48,7 +52,8 @@ def _permissions_id_to_user(permissons: WorkspacePermissions) -> Dict:
 
     # Cast to a regular dict, since it won't actually be
     # a `WorkspacePermissions` after we perform replacement
-    new_permissions = cast(Dict, deepcopy(permissons))
+    # new_permissions = cast(Dict, deepcopy(permissons))
+    new_permissions = asdict(permissons)
 
     for role, users in new_permissions.items():
         if role == "public":
@@ -56,13 +61,13 @@ def _permissions_id_to_user(permissons: WorkspacePermissions) -> Dict:
 
         if role == "owner":
             # Since the role is "owner", `users` is a `str`
-            user = find_user_from_id(users)
+            user = User.from_id(users)
             if user is not None:
                 new_permissions["owner"] = asdict(user)
         else:
             new_users = []
             for sub in users:
-                user = find_user_from_id(sub)
+                user = User.from_id(sub)
                 if user is not None:
                     new_users.append(asdict(user))
 
@@ -87,7 +92,8 @@ def _permissions_user_to_id(expanded_user_permissions: Dict) -> WorkspacePermiss
         else:
             permissions[role] = [user["sub"] for user in users]
 
-    return cast(WorkspacePermissions, permissions)
+    # return cast(WorkspacePermissions, permissions)
+    return WorkspacePermissions(**permissions)
 
 
 @bp.route("/workspaces", methods=["GET"])
@@ -98,7 +104,9 @@ def get_workspaces() -> Any:
 
     # Filter all workspaces based on whether it should be shown to the user who
     # is logged in.
-    stream = util.stream(w["name"] for w in db.get_workspaces() if is_reader(user, w))
+    stream = util.stream(
+        w for w in Workspace.list_all() if is_reader(user, Workspace(w))
+    )
     return stream
 
 
@@ -107,9 +115,8 @@ def get_workspaces() -> Any:
 @swag_from("swagger/get_workspace_permissions.yaml")
 def get_workspace_permissions(workspace: str) -> Any:
     """Retrieve the permissions of a workspace."""
-    metadata = db.get_workspace_metadata(workspace)
-
-    return _permissions_id_to_user(metadata["permissions"])
+    perms = Workspace(workspace).get_permissions()
+    return _permissions_id_to_user(perms)
 
 
 @bp.route("/workspaces/<workspace>/permissions", methods=["PUT"])
@@ -136,7 +143,8 @@ def set_workspace_permissions(workspace: str) -> Any:
 @swag_from("swagger/workspace_tables.yaml")
 def get_workspace_tables(workspace: str, type: TableType = "all") -> Any:  # noqa: A002
     """Retrieve the tables of a single workspace."""
-    tables = db.workspace_tables(workspace, type)
+    tables = Workspace(workspace).tables()
+
     return util.stream(tables)
 
 
@@ -158,7 +166,7 @@ def create_aql_table(workspace: str, table: str) -> Any:
 @swag_from("swagger/table_rows.yaml")
 def get_table_rows(workspace: str, table: str, offset: int = 0, limit: int = 30) -> Any:
     """Retrieve the rows and headers of a table."""
-    return db.workspace_table(workspace, table, offset, limit)
+    return Workspace(workspace).table(table).rows(offset, limit)
 
 
 @bp.route("/workspaces/<workspace>/graphs", methods=["GET"])
@@ -166,8 +174,7 @@ def get_table_rows(workspace: str, table: str, offset: int = 0, limit: int = 30)
 @swag_from("swagger/workspace_graphs.yaml")
 def get_workspace_graphs(workspace: str) -> Any:
     """Retrieve the graphs of a single workspace."""
-    graphs = db.workspace_graphs(workspace)
-    return util.stream(graphs)
+    return util.stream((g["name"] for g in Workspace(workspace).graphs()))
 
 
 @bp.route("/workspaces/<workspace>/graphs/<graph>", methods=["GET"])
@@ -175,7 +182,9 @@ def get_workspace_graphs(workspace: str) -> Any:
 @swag_from("swagger/workspace_graph.yaml")
 def get_workspace_graph(workspace: str, graph: str) -> Any:
     """Retrieve information about a graph."""
-    return db.workspace_graph(workspace, graph)
+    node_tables = Workspace(workspace).graph(graph).node_tables()
+    edge_table = Workspace(workspace).graph(graph).edge_table()
+    return {"edgeTable": edge_table, "nodeTables": node_tables}
 
 
 @bp.route("/workspaces/<workspace>/graphs/<graph>/nodes", methods=["GET"])
@@ -186,7 +195,7 @@ def get_graph_nodes(
     workspace: str, graph: str, offset: int = 0, limit: int = 30
 ) -> Any:
     """Retrieve the nodes of a graph."""
-    return db.graph_nodes(workspace, graph, offset, limit)
+    return Workspace(workspace).graph(graph).nodes(offset, limit)
 
 
 @bp.route(
@@ -197,7 +206,7 @@ def get_graph_nodes(
 @swag_from("swagger/node_data.yaml")
 def get_node_data(workspace: str, graph: str, table: str, node: str) -> Any:
     """Return the attributes associated with a node."""
-    return db.graph_node(workspace, graph, table, node)
+    return Workspace(workspace).graph(graph).node_attributes(table, node)
 
 
 @bp.route(
@@ -220,7 +229,11 @@ def get_node_edges(
     if direction not in allowed:
         raise BadQueryArgument("direction", direction, allowed)
 
-    return db.node_edges(workspace, graph, table, node, offset, limit, direction)
+    return (
+        Workspace(workspace)
+        .graph(graph)
+        .node_edges(table, node, direction, offset, limit)
+    )
 
 
 @bp.route("/workspaces/<workspace>", methods=["POST"])

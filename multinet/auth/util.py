@@ -5,9 +5,10 @@ from typing import Any, Optional, Callable
 
 from multinet import db
 from multinet.errors import Unauthorized
-from multinet.types import Workspace
-from multinet.auth.types import UserInfo
-from multinet.user import current_user
+# from multinet.types import Workspace
+# from multinet.auth.types import UserInfo
+from multinet.workspace import Workspace
+from multinet.user import current_user, UserInfo
 
 
 # NOTE: unfortunately, it is difficult to write a type signature for this
@@ -29,21 +30,21 @@ def require_login(f: Callable) -> Callable:
 
 def is_reader(user: Optional[UserInfo], workspace: Workspace) -> bool:
     """Indicate whether `user` has read permissions for `workspace`."""
-    perms = workspace["permissions"]
+    perms = workspace.get_permissions()
 
     # A non-logged-in user, by definition, is a reader of public workspaces.
     if user is None:
-        return perms["public"]
+        return bool(perms.public)
 
     # Otherwise, check to see if the workspace is public, or the user is at
     # least a reader of the workspace.
     sub = user.sub
     return (
-        perms["public"]
-        or sub in perms["readers"]
-        or sub in perms["writers"]
-        or sub in perms["maintainers"]
-        or perms["owner"] == sub
+        perms.public
+        or sub in perms.readers
+        or sub in perms.writers
+        or sub in perms.maintainers
+        or perms.owner == sub
     )
 
 
@@ -53,8 +54,7 @@ def require_reader(f: Any) -> Any:
     @functools.wraps(f)
     def wrapper(workspace: str, *args: Any, **kwargs: Any) -> Any:
         user = current_user()
-        workspace_metadata = db.get_workspace_metadata(workspace)
-        if not is_reader(user, workspace_metadata):
+        if not is_reader(user, Workspace(workspace)):
             raise Unauthorized(f"You must be a reader of workspace '{workspace}'")
 
         return f(workspace, *args, **kwargs)
@@ -97,10 +97,11 @@ def is_maintainer(user: Optional[UserInfo], workspace: Workspace) -> bool:
     if user is None:
         return False
 
-    perms = workspace["permissions"]
+    # perms = workspace["permissions"]
+    perms = workspace.get_permissions()
     sub = user.sub
 
-    return sub in perms["maintainers"] or perms["owner"] == sub
+    return sub in perms.maintainers or perms.owner == sub
 
 
 def require_maintainer(f: Any) -> Any:
@@ -109,8 +110,10 @@ def require_maintainer(f: Any) -> Any:
     @functools.wraps(f)
     def wrapper(workspace: str, *args: Any, **kwargs: Any) -> Any:
         user = current_user()
-        workspace_metadata = db.get_workspace_metadata(workspace)
-        if not is_maintainer(user, workspace_metadata):
+        # workspace_metadata = db.get_workspace_metadata(workspace)
+        # ws = Workspace(workspace)
+
+        if not is_maintainer(user, Workspace(workspace)):
             raise Unauthorized(f"You must be a maintainer of workspace '{workspace}'")
 
         return f(workspace, *args, **kwargs)

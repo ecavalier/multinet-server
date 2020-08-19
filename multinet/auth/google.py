@@ -16,15 +16,19 @@ from webargs.flaskparser import use_kwargs
 from webargs import fields
 
 from multinet.user import (
-    MULTINET_COOKIE,
-    load_user,
-    updated_user,
-    get_user_cookie,
-    set_user_cookie,
-    register_user,
-    filter_user_info,
+    User
+    #     MULTINET_COOKIE,
+    #     load_user,
+    #     updated_user,
+    #     get_user_cookie,
+    #     set_user_cookie,
+    #     register_user,
+    #     filter_user_info,
+    ,
 )
-from multinet.auth.types import GoogleUserInfo, User
+
+# from multinet.auth.types import GoogleUserInfo, User
+from multinet.auth.types import GoogleUserInfo
 
 from typing import Dict, Optional
 
@@ -133,15 +137,18 @@ def authorized(state: str, code: str) -> ResponseWrapper:
     # Code is automatically read from flask session
     token = google.authorize_access_token()
     rawinfo = parse_id_token(token["id_token"])
-    userinfo = filter_user_info(rawinfo)
 
-    loaded_user = load_user(userinfo)
-    if loaded_user is None:
-        user = register_user(userinfo)
+    if not User.exists(rawinfo.sub):
+        user = User.register(**rawinfo.__dict__)
     else:
-        new_user = from_dict(
-            User, {**dataclasses.asdict(loaded_user), **dataclasses.asdict(userinfo)}
-        )
+        existing_user = User.from_id(rawinfo.sub)
+        new_user_data = {**existing_user.__dict__, **rawinfo.__dict__}
+        new_user = User(**new_user_data)
+
+        user = new_user.save()
+        # loaded_user = User(**rawinfo.__dict__)
+        loaded_user.arango = loaded_user.get_session()
+        # new_user = from_dict(User, {**dataclasses.asdict(loaded_user), **rawinfo})
         user = updated_user(new_user)
 
     user = set_user_cookie(user)
