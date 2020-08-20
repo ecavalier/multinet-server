@@ -62,7 +62,7 @@ def check_db() -> bool:
 def register_legacy_workspaces() -> None:
     """Add legacy workspaces to the workspace mapping."""
     sysdb = system_db()
-    coll = workspace_mapping_collection()
+    coll = workspace_mapping_collection(readonly=False)
 
     databases = {name for name in sysdb.databases() if name != "_system"}
     registered = {doc["internal"] for doc in coll.all()}
@@ -74,9 +74,9 @@ def register_legacy_workspaces() -> None:
 
 # Since this shouldn't ever change while running, this function becomes a singleton
 @lru_cache(maxsize=1)
-def workspace_mapping_collection() -> StandardCollection:
+def workspace_mapping_collection(readonly: bool = True) -> StandardCollection:
     """Return the collection used for mapping external to internal workspace names."""
-    sysdb = system_db()
+    sysdb = system_db(readonly=readonly)
 
     if not sysdb.has_collection("workspace_mapping"):
         sysdb.create_collection("workspace_mapping")

@@ -134,7 +134,7 @@ def set_workspace_permissions(workspace: str) -> Any:
 @swag_from("swagger/workspace_tables.yaml")
 def get_workspace_tables(workspace: str, type: TableType = "all") -> Any:  # noqa: A002
     """Retrieve the tables of a single workspace."""
-    tables = Workspace(workspace).tables()
+    tables = Workspace(workspace).tables(type)
     return util.stream(tables)
 
 
@@ -231,15 +231,12 @@ def get_node_edges(
 @swag_from("swagger/create_workspace.yaml")
 def create_workspace(workspace: str) -> Any:
     """Create a new workspace."""
-
-    # The `require_login()` decorator ensures that a user is logged in by this
-    # point.
+    # The `require_login()` decorator ensures that a user is logged in
     user = current_user()
     assert user is not None
 
-    # Perform the actual backend update to create a new workspace owned by the
-    # logged in user.
-    return db.create_workspace(workspace, user)
+    Workspace.create(workspace, user)
+    return workspace
 
 
 @bp.route("/workspaces/<workspace>/aql", methods=["POST"])
@@ -251,7 +248,7 @@ def aql(workspace: str) -> Any:
     if not query:
         raise MalformedRequestBody(query)
 
-    result = db.aql_query(workspace, query)
+    result = Workspace(workspace).run_query(query)
     return util.stream(result)
 
 

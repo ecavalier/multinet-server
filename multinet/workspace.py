@@ -1,10 +1,17 @@
 """Operations that deal with workspaces."""
 from __future__ import annotations  # noqa: T484
 
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
 from arango.exceptions import DatabaseCreateError
+from arango.cursor import Cursor
 
-from multinet.db import workspace_mapping, workspace_mapping_collection, db
+from multinet.db import (
+    workspace_mapping,
+    workspace_mapping_collection,
+    db,
+    system_db,
+    _run_aql_query,
+)
 from multinet.errors import (
     AlreadyExists,
     InternalServerError,
@@ -17,7 +24,7 @@ from multinet.user import User
 from multinet.graph import Graph
 from multinet.table import Table
 
-from typing import List, Dict, Generator, Any
+from typing import Any, List, Dict, Generator, Optional
 
 
 @dataclass
@@ -38,22 +45,21 @@ class Workspace:
     # Keys that aren't saved to the database
     exclude_keys = {"handle", "readonly_handle", "readonly"}
 
-    def __init__(self, name: str, readonly: bool = True, **kwargs):
+    def __init__(self, name: str):
         """Create a Workspace Object."""
         self.name = name
-        self.readonly = readonly
 
         # TODO: Don't access database right away
         doc = self.get_metadata()
-        name = doc["internal"]
 
-        self.internal: str = name
+        # Due to call above, doc is guaranteed to be valid
+        self.internal: str = doc["internal"]
         self.permissions: WorkspacePermissions = WorkspacePermissions(
             **doc["permissions"]
         )
 
-        self.readonly_handle = db(name)
-        self.handle = db(name, readonly=False)
+        self.readonly_handle = db(self.internal)
+        self.handle = db(self.internal, readonly=False)
 
     @staticmethod
     def exists(name: str) -> bool:
@@ -66,21 +72,26 @@ class Workspace:
         if Workspace.exists(name):
             raise AlreadyExists("Workspace", name)
 
-        workspace = Workspace(
-            name,
-            False,
-            internal=generate_arango_workspace_name(),
-            permissions=WorkspacePermissions(owner.sub),
-        )
+        internal = generate_arango_workspace_name()
 
         try:
-            db("_system").create_database(workspace.internal)
+            system_db(readonly=False).create_database(internal)
         except DatabaseCreateError:
             # Could only happen if there's a name collision
-            raise InternalServerError()
+            raise InternalServerError("Error creating workspace")
 
-        coll = workspace_mapping_collection()
-        coll.insert(asdict(workspace))
+        permissions = WorkspacePermissions(owner=owner.sub).__dict__
+        workspace_dict = {
+            "name": name,
+            "internal": internal,
+            "permissions": permissions,
+        }
+
+        coll = workspace_mapping_collection(readonly=False)
+        coll.insert(workspace_dict, sync=True)
+        workspace_mapping.cache_clear()
+
+        return Workspace(name)
 
     @staticmethod
     def list_all() -> Generator[str, None, None]:
@@ -95,9 +106,9 @@ class Workspace:
         return (doc["name"] for doc in coll.find({"permissions.public": True}))
 
     @staticmethod
-    def from_dict(d: Dict, readonly: bool = True) -> Workspace:
+    def from_dict(d: Dict) -> Workspace:
         """Construct a workspace from a dict."""
-        workspace = Workspace(name=d["name"], readonly=readonly)
+        workspace = Workspace(name=d["name"])
 
         internal = d.get("internal")
         if internal:
@@ -153,7 +164,7 @@ class Workspace:
         """Fetch and return the metadata for this workspace."""
         doc = workspace_mapping(self.name)
         if not doc:
-            raise WorkspaceNotFound
+            raise WorkspaceNotFound(self.name)
 
         return doc
 
@@ -201,3 +212,7 @@ class Workspace:
     def table(self, name: str) -> Table:
         """Return a specific table."""
         return Table(name, self.name, self.handle.collection(name), self.handle.aql)
+
+    def run_query(self, query: str, bind_vars: Optional[Dict] = None) -> Cursor:
+        """Run an aql query on this workspace."""
+        return _run_aql_query(self.handle.aql, query, bind_vars=bind_vars)
