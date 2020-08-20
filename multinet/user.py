@@ -1,5 +1,5 @@
 """User data and functions."""
-from __future__ import annotations
+from __future__ import annotations  # noqa: T484
 
 import json
 from dataclasses import dataclass

@@ -18,6 +18,7 @@ class Graph:
     """Graph."""
 
     def __init__(self, name: str, workspace: str, handle: ArangoGraph, aql: AQL):
+        """Init Graph class."""
         self.name = name
         self.workspace = workspace
         self.handle = handle
@@ -26,6 +27,7 @@ class Graph:
     def nodes(
         self, offset: Optional[int] = None, limit: Optional[int] = None
     ) -> Dict[str, Any]:
+        """Return nodes in this graph."""
         coll_names = self.handle.vertex_collections()
 
         result_set_size = 0
@@ -48,15 +50,18 @@ class Graph:
         return {"count": result_set_size, "nodes": list(total_nodes)}
 
     def node_tables(self) -> Iterable[Table]:
+        """Return all node tables in this graph."""
         return self.handle.vertex_collections()
 
     def edge_table(self) -> Table:
+        """Return the edge table of this graph."""
         edge_defs = self.handle.edge_definitions()
 
         # Currently assume one edge definition per graph
         return edge_defs[0]["edge_collection"]
 
     def node_attributes(self, table: str, node: str):
+        """Return the attributes of the document with an ID of `table`/`node`."""
         node_id = f"{table}/{node}"
 
         try:
