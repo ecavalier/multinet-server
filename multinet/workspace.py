@@ -166,7 +166,7 @@ class Workspace:
         if not self.handle.has_graph(name):
             raise GraphNotFound(self.name, name)
 
-        return Graph(name, self.name, self.handle.graph(name), self.handle)
+        return Graph(name, self.name, self.handle.graph(name), self.handle.aql)
 
     def tables(self, table_type: str = "all") -> Generator[str, None, None]:
         """Return all tables of the specified type."""
@@ -200,4 +200,4 @@ class Workspace:
 
     def table(self, name: str) -> Table:
         """Return a specific table."""
-        return Table(name, self.handle.collection(name))
+        return Table(name, self.name, self.handle.collection(name), self.handle.aql)

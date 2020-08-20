@@ -1,16 +1,14 @@
 """Operations that deal with graphs."""
 
-from arango.database import StandardDatabase
 from arango.graph import Graph as ArangoGraph
-from arango.cursor import Cursor
+from arango.aql import AQL
 from arango.exceptions import DocumentGetError
 
-from multinet import workspace
 from multinet.table import Table
 from multinet.types import EdgeDirection
 from multinet.errors import TableNotFound, NodeNotFound
 
-from typing import Any, List, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 
 edge_direction_map = {"all": "any", "incoming": "inbound", "outgoing": "outbound"}
@@ -19,17 +17,11 @@ edge_direction_map = {"all": "any", "incoming": "inbound", "outgoing": "outbound
 class Graph:
     """Graph."""
 
-    def __init__(
-        self,
-        name: str,
-        workspace_name: str,
-        handle: ArangoGraph,
-        workspace_handle: StandardDatabase,
-    ):
+    def __init__(self, name: str, workspace: str, handle: ArangoGraph, aql: AQL):
         self.name = name
-        self.workspace_name = workspace_name
+        self.workspace = workspace
         self.handle = handle
-        self.workspace_handle = workspace_handle
+        self.aql = aql
 
     def nodes(
         self, offset: Optional[int] = None, limit: Optional[int] = None
@@ -70,7 +62,7 @@ class Graph:
         try:
             res = self.handle.vertex(node_id)
         except DocumentGetError:
-            raise TableNotFound(self.workspace_name, table)
+            raise TableNotFound(self.workspace, table)
 
         if res is None:
             raise NodeNotFound(table, node)
@@ -117,7 +109,7 @@ class Graph:
             RETURN count
         """
 
-        query_cur = self.workspace_handle.aql.execute(query)
-        count_cur = self.workspace_handle.aql.execute(count_query)
+        query_cur = self.aql.execute(query)
+        count_cur = self.aql.execute(count_query)
 
         return {"count": next(count_cur), "edges": list(query_cur)}

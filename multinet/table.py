@@ -1,8 +1,7 @@
 """Operations that deal with tables."""
 from __future__ import annotations  # noqa: T484
 from arango.collection import StandardCollection
-
-from multinet import workspace
+from arango.aql import AQL
 
 from typing import List, Dict, Iterable, Optional
 
@@ -10,10 +9,12 @@ from typing import List, Dict, Iterable, Optional
 class Table:
     """Table."""
 
-    def __init__(self, name: str, handle: StandardCollection):
+    def __init__(self, name: str, workspace: str, handle: StandardCollection, aql: AQL):
         self.edge = False
         self.name = name
+        self.workspace = workspace
         self.handle = handle
+        self.aql = aql
 
     def rows(self, offset: Optional[int] = None, limit: Optional[int] = None):
         rows = self.handle.find({}, skip=offset, limit=limit)
